@@ -40,7 +40,7 @@ Navegador ──HTTP──► web (Express) ──TCP 3306──► db (MySQL)
 ## Descargar
 
 ```bash
-git clone https://github.com/USUARIO/REPOSITORIO.git
+git clone https://github.com/marcoarteaga2304-dotcom/ProjectoMicroservicios.git 
 cd REPOSITORIO
 ```
 
