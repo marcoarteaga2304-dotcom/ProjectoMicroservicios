@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GlowCosmetics - Tienda de Maquillaje</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Playfair+Display:wght@600&display=swap">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- ENCABEZADO -->
+  <header>
+    <h2 class="logo" onclick="mostrarSeccion('sec-catalogo')">GlowCosmetics</h2>
+    <button class="menu-btn" aria-label="Menú" onclick="toggleMenu()">☰</button>
+    <div class="header-derecha" id="header-derecha">
+      <input type="text" id="input-buscar" placeholder="🔍 Buscar producto..." oninput="buscarProductos()">
+      <nav>
+        <span onclick="mostrarSeccion('sec-catalogo')">Catálogo</span>
+        <span onclick="mostrarSeccion('sec-carrito')">Bolsa (<span id="contador-carrito">0</span>)</span>
+        <span onclick="mostrarSeccion('sec-historial')">Mis Pedidos</span>
+        <span id="nav-admin" class="oculta" onclick="mostrarSeccion('sec-admin')">Administrar</span>
+        <span id="info-usuario" onclick="mostrarSeccion('sec-auth')">Ingresar</span>
+        <span id="nav-salir" class="oculta" onclick="logout()">Salir</span>
+        <span id="btn-tema" onclick="alternarTema()" title="Cambiar tema">🌙</span>
+      </nav>
+    </div>
+  </header>
+
+  <!-- CATÁLOGO -->
+  <main id="sec-catalogo" class="seccion ancho-xl">
+    <div class="banner" id="banner">✨ Bienvenida a GlowCosmetics ✨</div>
+
+    <div class="filtros">
+      <span class="activo" onclick="filtrar('Todos', this)">Todos</span>
+      <span onclick="filtrar('Rostro', this)">Rostro</span>
+      <span onclick="filtrar('Ojos', this)">Ojos</span>
+      <span onclick="filtrar('Labios', this)">Labios</span>
+      <span onclick="filtrar('Favoritos', this)">❤ Favoritos</span>
+    </div>
+
+    <div class="barra-filtros">
+      <select id="orden" onchange="aplicarFiltros()" aria-label="Ordenar">
+        <option value="destacados">Ordenar: Destacados</option>
+        <option value="novedades">Novedades</option>
+        <option value="precio-asc">Precio: menor a mayor</option>
+        <option value="precio-desc">Precio: mayor a menor</option>
+        <option value="nombre">Nombre (A-Z)</option>
+      </select>
+      <input type="number" id="precio-min" placeholder="Precio mín." min="0" oninput="buscarProductos()">
+      <input type="number" id="precio-max" placeholder="Precio máx." min="0" oninput="buscarProductos()">
+      <button class="btn btn-claro" onclick="limpiarFiltros()">Limpiar</button>
+    </div>
+
+    <h2 id="titulo-categoria" class="titulo-centro">Catálogo Completo</h2>
+    <div id="grid-productos" class="grid-productos"></div>
+  </main>
+
+  <!-- BOLSA -->
+  <section id="sec-carrito" class="oculta seccion ancho-md">
+    <h2>Tu Bolsa de Compras</h2>
+    <div id="lista-carrito"></div>
+
+    <div id="zona-checkout" class="oculta">
+      <div class="resumen">
+        <h3 class="subtitulo">Cupón de descuento</h3>
+        <div class="fila-cupon">
+          <input type="text" id="input-cupon" placeholder="Código de cupón" maxlength="30">
+          <button class="btn btn-oscuro" onclick="aplicarCupon()">Aplicar</button>
+        </div>
+        <p id="cupon-activo" class="nota oculta"></p>
+      </div>
+
+      <div class="resumen">
+        <h3 class="subtitulo">Dirección de envío</h3>
+        <div id="dir-campos" class="grid-dir"></div>
+        <label class="check"><input type="checkbox" id="guardar-dir" checked> Guardar esta dirección en mi perfil</label>
+      </div>
+
+      <div class="resumen">
+        <p>Subtotal: $<span id="subtotal">0</span> MXN</p>
+        <p id="fila-descuento" class="oculta">Descuento: -$<span id="descuento">0</span> MXN</p>
+        <p>Envío: $<span id="envio">0</span> MXN <span id="aviso-envio" class="nota"></span></p>
+        <h3>Total a Pagar: $<span id="total-final">0</span> MXN</h3>
+        <div id="zona-pago">
+          <button class="btn btn-rosa" id="btn-pagar" onclick="procesarPagoNormal()">Pagar Pedido</button>
+          <div id="paypal-contenedor"></div>
+          <p id="paypal-aviso" class="nota oculta">El pago con PayPal no está disponible por el momento.</p>
+        </div>
+      </div>
+    </div>
+    <button class="btn-link" onclick="mostrarSeccion('sec-catalogo')">← Seguir comprando</button>
+  </section>
+
+  <!-- LOGIN / REGISTRO / RECUPERAR -->
+  <section id="sec-auth" class="oculta seccion auth-caja">
+    <form id="form-login" onsubmit="hacerLogin(event)">
+      <h2>Iniciar Sesión</h2>
+      <label>Correo Electrónico:</label>
+      <input type="email" id="login-email" required autocomplete="email">
+      <label>Contraseña:</label>
+      <input type="password" id="login-pass" required autocomplete="current-password">
+      <button class="btn btn-rosa btn-block" type="submit">Entrar</button>
+      <p class="cambio-form"><span onclick="toggleAuth('recuperar')">¿Olvidaste tu contraseña?</span></p>
+      <p class="cambio-form">¿No tienes cuenta? <span onclick="toggleAuth('registro')">Regístrate aquí</span></p>
+    </form>
+
+    <form id="form-registro" class="oculta" onsubmit="hacerRegistro(event)">
+      <h2>Crear Cuenta</h2>
+      <label>Nombre Completo:</label>
+      <input type="text" id="reg-nombre" required autocomplete="name">
+      <label>Correo Electrónico:</label>
+      <input type="email" id="reg-email" required autocomplete="email">
+      <label>Contraseña (mínimo 6 caracteres):</label>
+      <input type="password" id="reg-pass" required minlength="6" autocomplete="new-password">
+      <label class="check"><input type="checkbox" id="reg-acepto" required> Acepto el <a href="#" onclick="mostrarInfo('privacidad');return false">Aviso de Privacidad</a> y los <a href="#" onclick="mostrarInfo('terminos');return false">Términos</a></label>
+      <button class="btn btn-oscuro btn-block" type="submit">Registrarse</button>
+      <p class="cambio-form">¿Ya tienes cuenta? <span onclick="toggleAuth('login')">Inicia sesión</span></p>
+    </form>
+
+    <form id="form-recuperar" class="oculta" onsubmit="solicitarRecuperacion(event)">
+      <h2>Recuperar Contraseña</h2>
+      <p class="nota">Escribe tu correo y te enviaremos un enlace para crear una nueva contraseña.</p>
+      <label>Correo Electrónico:</label>
+      <input type="email" id="rec-email" required>
+      <button class="btn btn-rosa btn-block" type="submit">Enviar enlace</button>
+      <p class="cambio-form"><span onclick="toggleAuth('login')">← Volver a iniciar sesión</span></p>
+    </form>
+
+    <form id="form-reset" class="oculta" onsubmit="restablecerPassword(event)">
+      <h2>Nueva Contraseña</h2>
+      <label>Nueva contraseña (mínimo 6 caracteres):</label>
+      <input type="password" id="reset-pass" required minlength="6" autocomplete="new-password">
+      <button class="btn btn-rosa btn-block" type="submit">Guardar contraseña</button>
+    </form>
+  </section>
+
+  <!-- HISTORIAL -->
+  <section id="sec-historial" class="oculta seccion ancho-md">
+    <h2>Mis Pedidos Anteriores</h2>
+    <div id="lista-historial"></div>
+    <button class="btn btn-oscuro" onclick="mostrarSeccion('sec-catalogo')">Volver al catálogo</button>
+  </section>
+
+  <!-- PERFIL -->
+  <section id="sec-perfil" class="oculta seccion ancho-md">
+    <h2>Mi Perfil</h2>
+    <form class="resumen" onsubmit="guardarPerfil(event)">
+      <h3 class="subtitulo">Datos y dirección de envío</h3>
+      <label>Nombre completo:</label>
+      <input type="text" id="pf-nombre" required>
+      <p class="nota" id="pf-email"></p>
+      <div id="pf-dir-campos" class="grid-dir"></div>
+      <button class="btn btn-rosa" type="submit">Guardar cambios</button>
+    </form>
+    <form class="resumen" onsubmit="cambiarPassword(event)">
+      <h3 class="subtitulo">Cambiar contraseña</h3>
+      <label>Contraseña actual:</label>
+      <input type="password" id="pw-actual" required autocomplete="current-password">
+      <label>Nueva contraseña (mínimo 6 caracteres):</label>
+      <input type="password" id="pw-nueva" required minlength="6" autocomplete="new-password">
+      <button class="btn btn-oscuro" type="submit">Actualizar contraseña</button>
+    </form>
+  </section>
+
+  <!-- ADMIN -->
+  <section id="sec-admin" class="oculta seccion ancho-lg">
+    <h2>Panel de Administración</h2>
+    <div class="tabs" id="admin-tabs">
+      <span class="activo" onclick="adminTab('resumen', this)">Resumen</span>
+      <span onclick="adminTab('pedidos', this)">Pedidos</span>
+      <span onclick="adminTab('productos', this)">Productos</span>
+      <span onclick="adminTab('cupones', this)">Cupones</span>
+    </div>
+
+    <div id="adm-resumen"></div>
+
+    <div id="adm-pedidos" class="oculta">
+      <div class="admin-filtros">
+        <select id="fp-estado" onchange="cargarAdminPedidos()">
+          <option value="">Todos los estados</option>
+          <option>Pagado</option><option>Enviado</option><option>Entregado</option><option>Cancelado</option>
+        </select>
+        <input type="date" id="fp-desde" onchange="cargarAdminPedidos()" title="Desde">
+        <input type="date" id="fp-hasta" onchange="cargarAdminPedidos()" title="Hasta">
+        <input type="text" id="fp-q" placeholder="Folio o correo" oninput="debounceAdminPedidos()">
+      </div>
+      <div class="tabla-scroll"><table>
+        <thead><tr><th>Folio / Cliente</th><th>Fecha</th><th>Total</th><th>Estado</th><th></th></tr></thead>
+        <tbody id="adm-pedidos-body"></tbody>
+      </table></div>
+    </div>
+
+    <div id="adm-productos" class="oculta">
+      <h3 class="subtitulo" id="form-prod-titulo">Agregar producto</h3>
+      <form class="admin-form" id="form-prod" onsubmit="guardarFormProducto(event)">
+        <input type="hidden" id="prod-id">
+        <input type="text" id="prod-nombre" placeholder="Nombre del producto" required>
+        <select id="prod-categoria" required><option>Rostro</option><option>Ojos</option><option>Labios</option></select>
+        <input type="number" id="prod-precio" placeholder="Precio (MXN)" min="1" step="0.01" required>
+        <input type="number" id="prod-stock" placeholder="Stock" min="0" step="1" required>
+        <input type="text" id="prod-imagen" placeholder="Ruta de imagen (ej. /img/producto.png)">
+        <label class="subir">📷 Subir imagen <input type="file" id="prod-archivo" accept="image/jpeg,image/png,image/webp" onchange="subirImagen()" hidden></label>
+        <input type="text" id="prod-color" placeholder="Color del tono (#RRGGBB)" maxlength="7">
+        <textarea id="prod-desc" placeholder="Descripción del producto" rows="2" maxlength="1000"></textarea>
+        <div class="admin-form-botones">
+          <button class="btn btn-rosa" type="submit" id="prod-btn">Agregar</button>
+          <button class="btn btn-claro oculta" type="button" id="prod-cancelar" onclick="cancelarEdicion()">Cancelar edición</button>
+        </div>
+      </form>
+      <h3 class="subtitulo">Inventario</h3>
+      <div class="tabla-scroll"><table>
+        <thead><tr><th>Producto</th><th>Categoría</th><th>Precio</th><th>Stock</th><th>Acciones</th></tr></thead>
+        <tbody id="adm-prod-body"></tbody>
+      </table></div>
+    </div>
+
+    <div id="adm-cupones" class="oculta">
+      <h3 class="subtitulo">Nuevo cupón</h3>
+      <form class="admin-form" onsubmit="crearCupon(event)">
+        <input type="text" id="cup-codigo" placeholder="Código (ej. GLOW15)" maxlength="30" required>
+        <select id="cup-tipo"><option value="porcentaje">Porcentaje (%)</option><option value="fijo">Monto fijo ($)</option></select>
+        <input type="number" id="cup-valor" placeholder="Valor" min="1" step="0.01" required>
+        <input type="number" id="cup-min" placeholder="Compra mínima" min="0" step="1" value="0">
+        <button class="btn btn-rosa" type="submit">Crear</button>
+      </form>
+      <h3 class="subtitulo">Cupones existentes</h3>
+      <div class="tabla-scroll"><table>
+        <thead><tr><th>Código</th><th>Descuento</th><th>Compra mínima</th><th>Estado</th><th></th></tr></thead>
+        <tbody id="adm-cup-body"></tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <!-- INFORMACIÓN: privacidad, términos, preguntas frecuentes y contacto -->
+  <section id="sec-info" class="oculta seccion ancho-md">
+    <div id="info-contenido" class="info"></div>
+    <button class="btn-link" onclick="mostrarSeccion('sec-catalogo')">← Volver al catálogo</button>
+  </section>
+
+  <footer>
+    <p>
+      <a href="#" onclick="mostrarInfo('faq');return false">Preguntas frecuentes</a> ·
+      <a href="#" onclick="mostrarInfo('contacto');return false">Contacto</a> ·
+      <a href="#" onclick="mostrarInfo('privacidad');return false">Aviso de privacidad</a> ·
+      <a href="#" onclick="mostrarInfo('terminos');return false">Términos y condiciones</a>
+    </p>
+    <p>© GlowCosmetics · Tienda de maquillaje</p>
+  </footer>
+
+  <!-- Detalle de producto -->
+  <div id="modal-detalle" class="modal oculta" onclick="if(event.target===this)cerrarDetalle()">
+    <div class="modal-caja detalle" id="detalle-contenido"></div>
+  </div>
+
+  <!-- Confirmación -->
+  <div id="modal" class="modal oculta">
+    <div class="modal-caja">
+      <p id="modal-texto"></p>
+      <div class="modal-botones">
+        <button class="btn btn-claro" id="modal-no">Cancelar</button>
+        <button class="btn btn-rosa" id="modal-si">Aceptar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toasts" aria-live="polite"></div>
+  <script src="app.js"></script>
+</body>
+</html>

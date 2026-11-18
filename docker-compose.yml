@@ -1,0 +1,39 @@
+# Dos servicios que se comunican por la red interna de Docker:
+#   web -> API Express + sitio web (puerto 3000)
+#   db  -> MySQL con las tablas de la tienda
+services:
+  db:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:?Define DB_PASSWORD en tu archivo .env}
+      MYSQL_DATABASE: ${DB_NAME:-glowcosmetics_db}
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_0900_ai_ci
+    volumes:
+      - glow_datos:/var/lib/mysql
+      - ./database:/docker-entrypoint-initdb.d:ro   # se ejecutan solo la primera vez
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  web:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      DB_HOST: db        # nombre del servicio MySQL dentro de la red de Docker
+      DB_USER: root
+      PORT: 3000
+    ports:
+      - "${PORT:-3000}:3000"
+    volumes:
+      - ./public/img:/app/public/img   # conserva las imágenes subidas desde el panel
+
+volumes:
+  glow_datos:

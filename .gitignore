@@ -1,0 +1,20 @@
+# Dependencias
+node_modules/
+
+# Configuración confidencial (solo se sube .env.example)
+.env
+.env.*
+!.env.example
+
+# Respaldos y volcados con datos reales
+respaldos/
+glowcosmetics_db.sql
+*.sql.bak
+
+# Logs y archivos del sistema o del editor
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
