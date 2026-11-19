@@ -76,6 +76,7 @@
         <h3 class="subtitulo">Dirección de envío</h3>
         <div id="dir-campos" class="grid-dir"></div>
         <label class="check"><input type="checkbox" id="guardar-dir" checked> Guardar esta dirección en mi perfil</label>
+        <p class="nota aviso-simple" id="aviso-simple-dir"></p>
       </div>
 
       <div class="resumen">
@@ -84,7 +85,7 @@
         <p>Envío: $<span id="envio">0</span> MXN <span id="aviso-envio" class="nota"></span></p>
         <h3>Total a Pagar: $<span id="total-final">0</span> MXN</h3>
         <div id="zona-pago">
-          <button class="btn btn-rosa" id="btn-pagar" onclick="procesarPagoNormal()">Pagar Pedido</button>
+          <p class="nota">🔒 El pago se realiza de forma segura en PayPal. Nosotros no vemos ni guardamos los datos de tu tarjeta.</p>
           <div id="paypal-contenedor"></div>
           <p id="paypal-aviso" class="nota oculta">El pago con PayPal no está disponible por el momento.</p>
         </div>
@@ -114,6 +115,7 @@
       <input type="email" id="reg-email" required autocomplete="email">
       <label>Contraseña (mínimo 6 caracteres):</label>
       <input type="password" id="reg-pass" required minlength="6" autocomplete="new-password">
+      <p class="nota aviso-simple" id="aviso-simple-reg"></p>
       <label class="check"><input type="checkbox" id="reg-acepto" required> Acepto el <a href="#" onclick="mostrarInfo('privacidad');return false">Aviso de Privacidad</a> y los <a href="#" onclick="mostrarInfo('terminos');return false">Términos</a></label>
       <button class="btn btn-oscuro btn-block" type="submit">Registrarse</button>
       <p class="cambio-form">¿Ya tienes cuenta? <span onclick="toggleAuth('login')">Inicia sesión</span></p>

@@ -236,6 +236,10 @@ tr.inactivo td { opacity: .5; }
 footer { text-align: center; padding: 1.5rem; border-top: 1px solid var(--borde); color: var(--texto-claro); font-size: .85rem; margin-top: auto; }
 footer p { margin-bottom: 6px; }
 
+/* Aviso de privacidad simplificado */
+.aviso-simple { margin-top: 12px; line-height: 1.5; font-size: .78rem; }
+.info h3 + ul, .info ul + p { margin-top: 4px; }
+
 /* RESPONSIVE */
 @media (max-width: 900px) { .admin-form { grid-template-columns: 1fr 1fr; } .admin-filtros { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 768px) {

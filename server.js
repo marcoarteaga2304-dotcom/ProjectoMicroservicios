@@ -9,7 +9,7 @@ const jwt = require('jsonwebtoken');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const multer = require('multer');
-const nodemailer = require('nodemailer');
+const { enviarCorreo, verificarCorreo, hayCorreo } = require('./correo');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -110,23 +110,6 @@ async function enTransaccion(fn) {
   } finally { conn.release(); }
 }
 
-// ---------- Correo (Por el momento no tenemos el SMTP configurado, solo se escribe en la consola de VS)
-const mailer = process.env.SMTP_HOST
-  ? nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: Number(process.env.SMTP_PORT || 587),
-      secure: Number(process.env.SMTP_PORT) === 465,
-      auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } : undefined
-    })
-  : null;
-
-async function enviarCorreo(to, subject, html, extra = {}) {
-  if (!mailer) { console.log(`[correo simulado] Para: ${to} | Asunto: ${subject}`); return; }
-  try {
-    await mailer.sendMail({ from: process.env.SMTP_FROM || 'GlowCosmetics <no-reply@glowcosmetics.local>', to, subject, html, ...extra });
-  } catch (e) { console.error('Error enviando correo:', e.message); }
-}
-
 // ---------- Validaciones ----------
 function validarDireccion(d) {
   if (!d || typeof d !== 'object') throw new ErrorNegocio('Ingresa tu dirección de envío.');
@@ -195,7 +178,7 @@ function camposProducto(b, parcial) {
   return o;
 }
 
-// ---------- Cupones y cotización (el servidor es la única fuente de precios)
+// ---------- Cupones y cotización (el servidor es la única fuente de precios) ----------
 async function evaluarCupon(conn, codigo, subtotal) {
   if (!codigo) return { cupon: null, descuento: 0 };
   const [r] = await conn.execute('SELECT * FROM cupones WHERE codigo = ? AND activo = 1', [String(codigo).trim().toUpperCase()]);
@@ -343,7 +326,7 @@ app.post('/api/recuperar', limiteCorreo, async (req, res) => {
     await pool.execute('DELETE FROM recuperacion WHERE usuario_email = ?', [email]);
     await pool.execute('INSERT INTO recuperacion (usuario_email, token_hash, expira) VALUES (?, ?, DATE_ADD(NOW(), INTERVAL 1 HOUR))', [email, hash]);
     const enlace = `${APP_URL}/?reset=${tokenPlano}`;
-    if (!mailer) console.log('🔑 Enlace de recuperación (modo desarrollo):', enlace);
+    if (!hayCorreo()) console.log('🔑 Enlace de recuperación (modo desarrollo):', enlace);
     enviarCorreo(email, 'Recupera tu contraseña de GlowCosmetics',
       `<p>Hola ${h(rows[0].nombre)}, recibimos una solicitud para restablecer tu contraseña.</p>
        <p><a href="${enlace}">Haz clic aquí para crear una nueva</a> (válido por 1 hora).</p>
@@ -425,20 +408,12 @@ app.post('/api/cotizar', auth, async (req, res) => {
   res.json(await cotizar(pool, normalizarCarrito(req.body.carrito), { cupon: req.body.cupon }));
 });
 
-app.post('/api/checkout', auth, async (req, res) => {
-  const carrito = normalizarCarrito(req.body.carrito);
-  const direccion = validarDireccion(req.body.direccion);
-  const pedido = await enTransaccion(conn => registrarPedido(conn, req.user.email, carrito, 'Normal', { direccion, cupon: req.body.cupon }));
-  despuesDeCompra(req.user.email, pedido);
-  res.json({ mensaje: '¡Compra realizada con éxito!', folio: pedido.folio, total: pedido.total });
-});
-
 app.get('/api/pedidos', auth, async (req, res) => {
   const [rows] = await pool.execute('SELECT * FROM pedidos WHERE usuario_email = ? ORDER BY fecha DESC', [req.user.email]);
   res.json(rows.map(p => ({ ...p, productos: p.productos ? leerJson(p.productos) : null, direccion: p.direccion ? leerJson(p.direccion) : null })));
 });
 
-// ---------- PayPal (Aun falta por configurar)
+// ---------- PayPal ----------
 async function ppToken() {
   if (!PAYPAL_CLIENT_ID || !PAYPAL_SECRET) throw new ErrorNegocio('PayPal no está configurado en el servidor.', 503);
   const r = await fetch(PAYPAL_BASE + '/v1/oauth2/token', {
@@ -449,6 +424,33 @@ async function ppToken() {
   const d = await r.json();
   if (!r.ok) throw new ErrorNegocio('No se pudo autenticar con PayPal.', 502);
   return d.access_token;
+}
+
+function mensajePayPal(d, porDefecto) {
+  const issue = d && d.details && d.details[0] && d.details[0].issue;
+  const mapa = {
+    INSTRUMENT_DECLINED: 'PayPal rechazó el método de pago. Elige otro dentro de PayPal e inténtalo de nuevo.',
+    PAYER_ACTION_REQUIRED: 'PayPal necesita que confirmes de nuevo el pago. Inténtalo otra vez.',
+    ORDER_NOT_APPROVED: 'El pago no fue aprobado en PayPal.',
+    ORDER_ALREADY_CAPTURED: 'Este pago ya fue procesado.'
+  };
+  return mapa[issue] || porDefecto;
+}
+
+// Reembolso total de un cobro de PayPal (idempotente: reintentar no devuelve dos veces)
+async function reembolsarPayPal(captureId) {
+  const t = await ppToken();
+  const r = await fetch(`${PAYPAL_BASE}/v2/payments/captures/${encodeURIComponent(captureId)}/refund`, {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + t, 'Content-Type': 'application/json', 'PayPal-Request-Id': 'glow-refund-' + captureId },
+    body: '{}'
+  });
+  const d = await r.json().catch(() => ({}));
+  const issue = d.details && d.details[0] && d.details[0].issue;
+  if (!r.ok && issue !== 'CAPTURE_FULLY_REFUNDED') {
+    console.error('PayPal: fallo el reembolso', captureId, JSON.stringify(d));
+    throw new ErrorNegocio('PayPal no pudo procesar el reembolso: ' + ((d.details && d.details[0] && d.details[0].description) || d.message || 'error desconocido'), 502);
+  }
 }
 
 app.post('/api/paypal/crear-orden', auth, async (req, res) => {
@@ -475,18 +477,39 @@ app.post('/api/paypal/capturar-orden', auth, async (req, res) => {
   const orden = rows[0];
   if (!orden) throw new ErrorNegocio('Orden de PayPal no encontrada o expirada.');
 
-  const pedido = await enTransaccion(async conn => {
-    const p = await registrarPedido(conn, orden.usuario_email, leerJson(orden.carrito), 'PayPal',
-      { direccion: leerJson(orden.direccion), cupon: orden.cupon, paypalId: orderID });
-    if (Math.abs(p.total - Number(orden.total)) > 0.01) throw new ErrorNegocio('Los precios cambiaron. Revisa tu bolsa e intenta de nuevo.');
-    const t = await ppToken();
-    const cap = await fetch(`${PAYPAL_BASE}/v2/checkout/orders/${encodeURIComponent(orderID)}/capture`, {
-      method: 'POST', headers: { Authorization: 'Bearer ' + t, 'Content-Type': 'application/json' }
+  let capturado = false;
+  let pedido;
+  try {
+    pedido = await enTransaccion(async conn => {
+      const p = await registrarPedido(conn, orden.usuario_email, leerJson(orden.carrito), 'PayPal',
+        { direccion: leerJson(orden.direccion), cupon: orden.cupon, paypalId: orderID });
+      if (Math.abs(p.total - Number(orden.total)) > 0.01) throw new ErrorNegocio('Los precios cambiaron. Revisa tu bolsa e intenta de nuevo.');
+
+      const t = await ppToken();
+      const cap = await fetch(`${PAYPAL_BASE}/v2/checkout/orders/${encodeURIComponent(orderID)}/capture`, {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + t, 'Content-Type': 'application/json', 'PayPal-Request-Id': 'glow-capture-' + orderID }
+      });
+      const d = await cap.json().catch(() => ({}));
+      if (!cap.ok) throw new ErrorNegocio(mensajePayPal(d, 'PayPal no pudo completar el pago.'), 502);
+
+      const c = d.purchase_units && d.purchase_units[0] && d.purchase_units[0].payments && d.purchase_units[0].payments.captures && d.purchase_units[0].payments.captures[0];
+      if (d.status !== 'COMPLETED' || !c || c.status !== 'COMPLETED') {
+        console.error(`PayPal: la orden ${orderID} no quedó completada. Estado: ${d.status}/${c && c.status}. Motivo: ${c && c.status_details && c.status_details.reason}`);
+        throw new ErrorNegocio('El pago quedó pendiente en PayPal. Si usas cuentas Sandbox, revisa que la cuenta comercial acepte pesos mexicanos (MXN).', 502);
+      }
+      capturado = true;
+      try {
+        await conn.execute('UPDATE pedidos SET paypal_capture_id = ? WHERE folio = ?', [c.id, p.folio]);
+      } catch (e) {
+        console.error('No se pudo guardar paypal_capture_id (¿falta ejecutar database/04-migracion3.sql?):', e.message);
+      }
+      return p; // si algo falla antes, se revierten el stock y el pedido
     });
-    const d = await cap.json();
-    if (!cap.ok || d.status !== 'COMPLETED') throw new ErrorNegocio('PayPal no pudo completar el pago.', 502);
-    return p; // si algo falla antes, se revierten el stock y el pedido
-  });
+  } catch (e) {
+    if (capturado) console.error(`⚠️  PayPal cobró la orden ${orderID} pero no se pudo guardar el pedido: ${e.message}`);
+    throw e;
+  }
   await pool.execute('DELETE FROM paypal_ordenes WHERE order_id = ?', [orderID]);
   despuesDeCompra(req.user.email, pedido);
   res.json({ mensaje: '¡Pago con PayPal procesado con éxito!', folio: pedido.folio, total: pedido.total });
@@ -554,22 +577,34 @@ app.put('/api/admin/pedidos/:id/estado', auth, soloAdmin, async (req, res) => {
   const id = Number(req.params.id);
   const { estado } = req.body;
   if (!Number.isInteger(id) || !ESTADOS.includes(estado)) throw new ErrorNegocio('Estado inválido.');
+  let reembolsado = false;
   const ped = await enTransaccion(async conn => {
     const [rows] = await conn.execute('SELECT * FROM pedidos WHERE id = ? FOR UPDATE', [id]);
     const p = rows[0];
     if (!p) throw new ErrorNegocio('Pedido no encontrado.', 404);
     if (p.estado === 'Cancelado') throw new ErrorNegocio('Un pedido cancelado ya no puede cambiar de estado.');
-    if (estado === 'Cancelado') { // devuelve el stock
-      for (const it of (p.productos ? leerJson(p.productos) : [])) {
+    if (estado === 'Cancelado') {
+      for (const it of (p.productos ? leerJson(p.productos) : [])) { // devuelve el stock
         await conn.execute('UPDATE productos SET stock = stock + ? WHERE id = ?', [it.cantidad, it.id]);
       }
     }
     await conn.execute('UPDATE pedidos SET estado = ? WHERE id = ?', [estado, id]);
+    if (estado === 'Cancelado' && p.metodo_pago === 'PayPal' && p.paypal_capture_id) {
+      await reembolsarPayPal(p.paypal_capture_id); // si PayPal falla, se revierte toda la cancelación
+      reembolsado = true;
+    }
     return p;
   });
+  const nota = reembolsado ? '<p>Reembolsamos el pago completo a tu cuenta de PayPal.</p>' : '';
   enviarCorreo(ped.usuario_email, `Tu pedido ${ped.folio}: ${estado}`,
-    `<p>El estado de tu pedido <b>${h(ped.folio)}</b> cambió a: <b>${h(estado)}</b>.</p>`);
-  res.json({ mensaje: 'Estado actualizado' });
+    `<p>El estado de tu pedido <b>${h(ped.folio)}</b> cambió a: <b>${h(estado)}</b>.</p>${nota}`);
+  let mensaje = 'Estado actualizado';
+  if (estado === 'Cancelado') {
+    mensaje = reembolsado ? 'Pedido cancelado y pago reembolsado en PayPal'
+      : ped.metodo_pago === 'PayPal' ? 'Pedido cancelado. No se encontró el identificador del cobro: haz el reembolso manualmente en PayPal.'
+      : 'Pedido cancelado';
+  }
+  res.json({ mensaje });
 });
 
 app.get('/api/admin/resumen', auth, soloAdmin, async (req, res) => {
@@ -629,4 +664,19 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Error en el servidor.' });
 });
 
-app.listen(PORT, () => console.log(`Tienda activa en http://localhost:${PORT}`));
+async function verificarPayPal() {
+  if (!PAYPAL_CLIENT_ID || !PAYPAL_SECRET) {
+    console.warn('💳 PayPal sin configurar: la tienda no podrá cobrar (define PAYPAL_CLIENT_ID y PAYPAL_SECRET en .env).');
+    return;
+  }
+  try {
+    await ppToken();
+    console.log(`💳 PayPal conectado (${process.env.PAYPAL_MODE === 'live' ? 'LIVE - dinero real' : 'sandbox'})`);
+  } catch (e) { console.error('💳 PayPal rechazó las credenciales:', e.message); }
+}
+
+app.listen(PORT, () => {
+  console.log(`Tienda activa en http://localhost:${PORT}`);
+  verificarCorreo();
+  verificarPayPal();
+});

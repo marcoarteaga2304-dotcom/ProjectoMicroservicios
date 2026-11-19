@@ -8,7 +8,8 @@ Tienda en línea de maquillaje con catálogo, bolsa de compras, pago con PayPal,
 |---|---|---|
 | `web` | Node.js + Express | Sirve el sitio (`public/`) y la API REST: usuarios, productos, pedidos, pagos, panel de administración |
 | `db` | MySQL 8.4 | Guarda usuarios, productos, pedidos, cupones, reseñas, etc. |
-| PayPal | API externa | Procesa los pagos con PayPal (Orders v2) |
+| PayPal | API externa | Único método de pago: cobros y reembolsos (Orders v2) |
+| SMTP | Servicio de correo | Envía confirmaciones, avisos de pedido y recuperación de contraseña |
 
 Comunicación: el navegador consulta a `web` por HTTP (puerto 3000); `web` se conecta a `db` por TCP (puerto 3306) dentro de la red de Docker, usando el nombre del servicio (`db`) como host; y `web` llama a la API de PayPal por HTTPS.
 
@@ -23,7 +24,10 @@ Navegador ──HTTP──► web (Express) ──TCP 3306──► db (MySQL)
 ├── server.js            API y servidor web
 ├── public/              Sitio (HTML, CSS, JS) e imágenes (public/img)
 ├── database/            Scripts SQL que Docker ejecuta al crear la base
+├── correo.js            Envío de correos (SMTP)
 ├── crear-admin.js       Crea o promueve un usuario administrador
+├── probar-paypal.js     Verifica las credenciales de PayPal
+├── probar-correo.js     Verifica el servidor de correo
 ├── respaldo.js          Copia de seguridad de la base (npm run respaldo)
 ├── Dockerfile           Imagen del servicio web
 ├── docker-compose.yml   Orquesta web + db
@@ -40,7 +44,7 @@ Navegador ──HTTP──► web (Express) ──TCP 3306──► db (MySQL)
 ## Descargar
 
 ```bash
-git clone https://github.com/marcoarteaga2304-dotcom/ProjectoMicroservicios.git 
+git clone https://github.com/USUARIO/REPOSITORIO.git
 cd REPOSITORIO
 ```
 
@@ -100,9 +104,35 @@ docker compose down -v            # detener y BORRAR la base de datos
 
 `express`, `mysql2`, `bcrypt`, `jsonwebtoken`, `helmet`, `express-rate-limit`, `multer`, `nodemailer`, `dotenv` (la lista completa está en `package.json`).
 
+## Pagos con PayPal (único método de pago)
+
+1. Entra a <https://developer.paypal.com>, activa **Sandbox** y abre *Apps & Credentials* → *Create App* (tipo Merchant), eligiendo una cuenta comercial Sandbox.
+2. Copia el *Client ID* y el *Secret* a tu `.env` (`PAYPAL_CLIENT_ID`, `PAYPAL_SECRET`) y deja `PAYPAL_MODE=sandbox`.
+3. Para comprar en pruebas, usa la cuenta **Personal** de *Testing Tools → Sandbox Accounts*, no tu cuenta real.
+4. Verifica la configuración:
+
+   ```bash
+   docker compose exec web node probar-paypal.js
+   ```
+
+> Los cobros se hacen en pesos mexicanos (MXN). Si usas cuentas Sandbox, crea la cuenta comercial con país México para que acepte MXN sin conversión.
+
+Si tu base ya existía antes de agregar los reembolsos, ejecuta una vez `database/04-migracion3.sql` (o recrea la base con `docker compose down -v`).
+
+## Correo electrónico (SMTP)
+
+Define en `.env` `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` y `SMTP_FROM` (ejemplos en `.env.example`). Prueba la conexión y envía un correo de prueba:
+
+```bash
+docker compose exec web node probar-correo.js tu-correo@ejemplo.com
+```
+
+Sin `SMTP_HOST`, la tienda funciona, pero los correos solo se muestran en la consola.
+
 ## Solución de problemas
 
 - **El puerto 3000 está ocupado:** cambia `PORT` en `.env` (por ejemplo, 3001) y abre `http://localhost:3001`.
 - **`DB_PASSWORD` no definida:** falta el archivo `.env` o esa variable.
 - **Cambié la contraseña de la base y no funciona:** el volumen conserva la contraseña anterior; ejecuta `docker compose down -v` y vuelve a levantar.
-- **No llegan correos:** sin `SMTP_HOST` los correos solo se muestran en la consola (`docker compose logs web`), incluido el enlace de recuperación de contraseña.
+- **No llegan correos:** ejecuta `docker compose exec web node probar-correo.js` para ver el error. Sin `SMTP_HOST`, los correos solo se muestran en la consola (`docker compose logs web`), incluido el enlace de recuperación de contraseña.
+- **El botón de PayPal no aparece o falla:** ejecuta `docker compose exec web node probar-paypal.js` y revisa que el Client ID y el Secret sean de la misma app Sandbox.
