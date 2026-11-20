@@ -26,6 +26,8 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const dinero = n => Number(n || 0).toLocaleString('es-MX', { maximumFractionDigits: 2 });
 const estrellas = n => { const r = Math.round(n || 0); return '★'.repeat(r) + '☆'.repeat(5 - r); };
+const ICONO_CORAZON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>';
+const IMG_FALLBACK = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300"><rect width="100%" height="100%" fill="#fce4ec"/><text x="50%" y="50%" fill="#d63384" font-family="Arial" font-size="18" text-anchor="middle">Imagen no disponible</text></svg>');
 const fecha = f => new Date(f).toLocaleString('es-MX');
 
 // ======================= INICIO =======================
@@ -159,8 +161,8 @@ function renderizarGrid(lista) {
     const texto = p.stock === 0 ? 'Agotado' : p.stock <= 3 ? `¡Últimas ${p.stock} piezas!` : `Disponibles: ${p.stock}`;
     return `
     <div class="tarjeta-producto" style="animation-delay:${Math.min(i, 12) * 45}ms">
-      <button class="corazon ${favoritos.has(p.id) ? 'activo' : ''}" data-fav="${p.id}" onclick="toggleFavorito(event, ${p.id})" aria-label="Favorito">♥</button>
-      <img src="${esc(encodeURI(p.imagen))}" alt="${esc(p.nombre)}" loading="lazy" onclick="abrirDetalle(${p.id})">
+      <button class="corazon ${favoritos.has(p.id) ? 'activo' : ''}" data-fav="${p.id}" onclick="toggleFavorito(event, ${p.id})" aria-label="Agregar a favoritos" title="Agregar a favoritos">${ICONO_CORAZON}</button>
+      <img onerror="this.onerror=null;this.src=IMG_FALLBACK" src="${esc(encodeURI(p.imagen))}" alt="${esc(p.nombre)}" loading="lazy" onclick="abrirDetalle(${p.id})">
       <div class="info-producto">
         <span class="categoria-badge">${esc(p.categoria)}</span>
         <h3 onclick="abrirDetalle(${p.id})">${esc(p.nombre)}</h3>
@@ -209,11 +211,17 @@ function filtrar(categoria, elemento) {
   aplicarFiltros();
 }
 
+function actualizarContFav() {
+  const c = $('cont-fav');
+  if (c) c.textContent = favoritos.size ? `(${favoritos.size})` : '';
+}
+
 async function toggleFavorito(ev, id) {
   ev.stopPropagation();
   if (!usuarioActual) { toast('✨ Inicia sesión para guardar favoritos.', 'info'); return mostrarSeccion('sec-auth'); }
   const era = favoritos.has(id);
   era ? favoritos.delete(id) : favoritos.add(id);
+  actualizarContFav();
   document.querySelectorAll(`[data-fav="${id}"]`).forEach(b => b.classList.toggle('activo', !era));
   try {
     await api(`/api/favoritos/${id}`, { method: era ? 'DELETE' : 'PUT' });
@@ -221,6 +229,7 @@ async function toggleFavorito(ev, id) {
     if (categoriaActual === 'Favoritos') aplicarFiltros();
   } catch (e) {
     era ? favoritos.add(id) : favoritos.delete(id);
+    actualizarContFav();
     aplicarFiltros();
     toast(e.message, 'error');
   }
@@ -235,7 +244,7 @@ function abrirDetalle(id) {
   $('detalle-contenido').innerHTML = `
     <button class="cerrar" onclick="cerrarDetalle()" aria-label="Cerrar">×</button>
     <div class="detalle-grid">
-      <img src="${esc(encodeURI(p.imagen))}" alt="${esc(p.nombre)}">
+      <img onerror="this.onerror=null;this.src=IMG_FALLBACK" src="${esc(encodeURI(p.imagen))}" alt="${esc(p.nombre)}">
       <div class="detalle">
         <span class="categoria-badge">${esc(p.categoria)}</span>
         <h2>${esc(p.nombre)}</h2>
@@ -337,7 +346,7 @@ function actualizarVistaCarrito() {
   const lineas = carrito.map(it => ({ it, p: productos.find(x => x.id === it.id) })).filter(l => l.p);
   $('lista-carrito').innerHTML = lineas.length ? lineas.map(({ it, p }) => `
     <div class="item-carrito">
-      <img src="${esc(encodeURI(p.imagen))}" alt="">
+      <img onerror="this.onerror=null;this.src=IMG_FALLBACK" src="${esc(encodeURI(p.imagen))}" alt="">
       <div class="item-info"><h4>${esc(p.nombre)}</h4><p>$${dinero(p.precio)} MXN</p></div>
       <div class="cantidad">
         <button onclick="cambiarCantidad(${p.id}, -1)" aria-label="Menos">−</button>
@@ -521,6 +530,7 @@ async function sincronizarUsuario() {
     if (c.items.length) carrito = c.items;
     favoritos = new Set(f);
   } catch {}
+  actualizarContFav();
   carrito = carrito.filter(i => productos.some(p => p.id === i.id));
   guardarSesion();
   actualizarContador();
@@ -544,6 +554,7 @@ async function logout() { if (await confirmar('¿Deseas cerrar sesión?')) cerra
 
 function cerrarSesion(expirada) {
   usuarioActual = null; token = null; carrito = []; favoritos = new Set(); perfil = null; cuponCodigo = null; cotizacion = null;
+  actualizarContFav();
   if (categoriaActual === 'Favoritos') { categoriaActual = 'Todos'; }
   try { sessionStorage.removeItem('glow_sesion'); } catch {}
   actualizarUIUsuario();
@@ -704,7 +715,7 @@ async function cargarAdminProductos() {
     adminProductos = await api('/api/admin/productos');
     $('adm-prod-body').innerHTML = adminProductos.map(p => `
       <tr id="prow-${p.id}" class="${p.activo ? '' : 'inactivo'}">
-        <td><img class="miniatura" src="${esc(encodeURI(p.imagen))}" alt="">${esc(p.nombre)}${p.activo ? '' : ' <span class="mini">(desactivado)</span>'}</td>
+        <td><img class="miniatura" onerror="this.onerror=null;this.src=IMG_FALLBACK" src="${esc(encodeURI(p.imagen))}" alt="">${esc(p.nombre)}${p.activo ? '' : ' <span class="mini">(desactivado)</span>'}</td>
         <td>${esc(p.categoria)}</td>
         <td><input type="number" id="precio-${p.id}" value="${p.precio}" min="1" step="0.01"></td>
         <td><input type="number" id="stock-${p.id}" value="${p.stock}" min="0" step="1"></td>

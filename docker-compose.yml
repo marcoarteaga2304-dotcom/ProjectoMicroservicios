@@ -29,11 +29,27 @@ services:
     environment:
       DB_HOST: db        # nombre del servicio MySQL dentro de la red de Docker
       DB_USER: root
+      # Misma fuente que usa MySQL para su contraseña: evita diferencias al leer el .env
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME:-glowcosmetics_db}
       PORT: 3000
     ports:
       - "${PORT:-3000}:3000"
     volumes:
       - ./public/img:/app/public/img   # conserva las imágenes subidas desde el panel
+
+  # Opcional, solo para consultar la base de Docker en el navegador:
+  #   docker compose --profile herramientas up -d   ->   http://localhost:8081
+  phpmyadmin:
+    image: phpmyadmin:5
+    profiles: ["herramientas"]
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PMA_HOST: db
+    ports:
+      - "8081:80"
 
 volumes:
   glow_datos:
