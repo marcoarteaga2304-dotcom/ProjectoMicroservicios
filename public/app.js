@@ -27,7 +27,7 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': 
 const dinero = n => Number(n || 0).toLocaleString('es-MX', { maximumFractionDigits: 2 });
 const estrellas = n => { const r = Math.round(n || 0); return '★'.repeat(r) + '☆'.repeat(5 - r); };
 const ICONO_CORAZON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>';
-const IMG_FALLBACK = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300"><rect width="100%" height="100%" fill="#fce4ec"/><text x="50%" y="50%" fill="#d63384" font-family="Arial" font-size="18" text-anchor="middle">Imagen no disponible</text></svg>');
+const IMG_FALLBACK = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300"><rect width="100%" height="100%" fill="#f4e8d7"/><text x="50%" y="50%" fill="#9f8e7a" font-family="Arial" font-size="16" text-anchor="middle">Imagen no disponible</text></svg>');
 const fecha = f => new Date(f).toLocaleString('es-MX');
 
 // ======================= INICIO =======================
@@ -469,7 +469,7 @@ function cargarPayPal() {
 
 function renderBotonesPayPal() {
   paypal.Buttons({
-    style: { layout: 'vertical', shape: 'pill', label: 'paypal' },
+    style: { layout: 'vertical', shape: 'pill', color: 'black', label: 'paypal' },
     onClick: (data, actions) => {   // valida la dirección ANTES de abrir la ventana de PayPal
       try { leerDireccion('dir'); } catch (e) { toast(e.message, 'warn'); return actions.reject(); }
       if (!carrito.length) return actions.reject();
